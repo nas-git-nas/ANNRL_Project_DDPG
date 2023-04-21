@@ -3,8 +3,8 @@ import torch
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-from replay_buffer import ReplayBuffer
-from q_values import QValues
+from src.replay_buffer import ReplayBuffer
+from src.q_values import QValues
 
 class Simulation():
     def __init__(self, env, agent, learn_qval=False, verb=False, render=False, plot=False, stat=False) -> None:
@@ -90,22 +90,28 @@ class Simulation():
 
         # plot rewards
         if self.plot:
-            fig = plt.figure()
-            plt.errorbar(x=range(num_episodes), y=rewards_mean, yerr=rewards_std, ecolor="red", label="Rewards")
-            plt.xlabel("Episode")
-            plt.ylabel("Reward")
-            plt.legend()
-            plt.show()
+            self._plot_reward(num_episodes=num_episodes, rewards_mean=rewards_mean, rewards_std=rewards_std)
 
         # print statistics
         if self.stat:
-            print(f"Statistics for {num_episodes} episodes")
-            print(f"    Mean (of all episodes) cumulative reward: {np.mean(rewards_sum)}")
-            print(f"    Std (of all episodes) cumulative reward: {np.std(rewards_sum)}")
+            self._print_stat(num_episodes=num_episodes, rewards_sum=rewards_sum)
 
         # plot q-values learning loss
         if self.learn_qval:
             self.q_values.plotLoss()
 
         return rewards_sum
+    
+    def _print_stat(self, num_episodes, rewards_sum):
+        print(f"Statistics for {num_episodes} episodes")
+        print(f"    Mean (of all episodes) cumulative reward: {np.mean(rewards_sum)}")
+        print(f"    Std (of all episodes) cumulative reward: {np.std(rewards_sum)}")
+
+    def _plot_reward(self, num_episodes, rewards_mean, rewards_std):
+        fig = plt.figure()
+        plt.errorbar(x=range(num_episodes), y=rewards_mean, yerr=rewards_std, ecolor="red", label="Rewards")
+        plt.xlabel("Episode")
+        plt.ylabel("Reward")
+        plt.legend()
+        plt.show()
     

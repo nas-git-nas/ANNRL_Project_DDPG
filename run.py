@@ -2,9 +2,9 @@ import gym
 import numpy as np
 import matplotlib.pyplot as plt
 
-from environment import NormalizedEnv
-from action import RandomAgent, HeuristicPendulumAgent
-from simulation import Simulation
+from src.environment import NormalizedEnv
+from src.action import RandomAgent, HeuristicPendulumAgent
+from src.simulation import Simulation
     
 
 def random_agent():
@@ -13,7 +13,7 @@ def random_agent():
     agent = RandomAgent(env=env)
 
     # run algorithm
-    simu = Simulation(env=env, agent=agent, verb=False, render=False, plot=True, stat=True)
+    simu = Simulation(env=env, agent=agent, verb=False, render=True, plot=True, stat=True)
     simu.run(num_episodes=10)
 
 def heuristic_pendulum_agent():
@@ -58,6 +58,21 @@ def heuristic_qvalues_agent():
 
 
 if __name__ == "__main__":
-    random_agent()
-    # heuristic_pendulum_agent()
+    """
+    PART 3
+        Random input
+    """
+    # random_agent()
+
+    """
+    PART 3
+        Heuristic input, grid search for best constant torque
+    """
+    heuristic_pendulum_agent()
+
+    """
+    PART 4
+        Q-values learning
+        -> not yet working!
+    """
     # heuristic_qvalues_agent()

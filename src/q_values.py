@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
-from q_network import QNetwork
+from src.q_network import QNetwork
 
 
 class QValues():

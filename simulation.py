@@ -1,16 +1,27 @@
 import numpy as np
+import torch
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
+from replay_buffer import ReplayBuffer
+from q_values import QValues
+
 class Simulation():
-    def __init__(self, env, agent, verb=False, render=False, plot=False, stat=False) -> None:
+    def __init__(self, env, agent, learn_qval=False, verb=False, render=False, plot=False, stat=False) -> None:
         self.env = env
         self.agent = agent
+
+        self.learn_qval = learn_qval
 
         self.verb = verb
         self.render = render
         self.plot = plot
         self.stat = stat
+
+        if self.learn_qval:
+            self.buffer = ReplayBuffer(max_size=10000, seed=1)
+            self.q_values = QValues(gamma=0.99, lr=1e-4)
+            self.batch_size = 128
 
     def run(self, num_episodes=10):
         # create figure for rendering
@@ -31,7 +42,17 @@ class Simulation():
             while True:
                 # take action and update environment
                 action = self.agent.computeAction(state)
-                next_state, reward, terminated, truncated, info = self.env.step(action=action)
+                next_state, reward, term, trunc, info = self.env.step(action=action)
+
+                # learn q-network
+                if self.learn_qval:
+                    # add transition to replay buffer
+                    self.buffer.addTransition(state=state, action=action, reward=reward, next_state=next_state, trunc=trunc)
+                    batch = self.buffer.sampleBatch(batch_size=self.batch_size)
+
+                    # train q-network if replay buffer is large enough
+                    if batch is not False:
+                        self.q_values.trainStep(batch=batch, agent=self.agent)
                 
                 # render environment
                 if self.render:
@@ -40,7 +61,7 @@ class Simulation():
 
                 # print info
                 if self.verb:
-                    print(f"step: {j}, action: {action}, reward: {reward}, terminated: {terminated}, truncated: {truncated}, info: {info}")
+                    print(f"step: {j}, action: {action}, reward: {reward}, terminated: {term}, truncated: {trunc}, info: {info}")
 
                 # update state
                 state = next_state
@@ -48,11 +69,11 @@ class Simulation():
                 j += 1
 
                 # check if episode is terminated or truncated
-                if terminated:
+                if term:
                     if self.verb:
                         print(f"Episode terminated, steps: {j}")
                     break
-                if truncated:
+                if trunc:
                     if self.verb:
                         print(f"Episode truncated, steps: {j}")
                     break
@@ -82,4 +103,9 @@ class Simulation():
             print(f"    Mean (of all episodes) cumulative reward: {np.mean(rewards_sum)}")
             print(f"    Std (of all episodes) cumulative reward: {np.std(rewards_sum)}")
 
+        # plot q-values learning loss
+        if self.learn_qval:
+            self.q_values.plotLoss()
+
         return rewards_sum
+    

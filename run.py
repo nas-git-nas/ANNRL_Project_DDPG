@@ -1,36 +1,37 @@
 import gym
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
 from src.environment import NormalizedEnv
-from src.action import RandomAgent, HeuristicPendulumAgent, DDPGAgent
-from src.q_values import QValues
+from src.actor import RandomActor, HeuristicActor, DDPGActor
+from src.critic import Critic
 from src.simulation import Simulation
     
 
-def random_agent():
-    # create environment and agent
+def random_actor():
+    # create environment and actor
     env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
-    agent = RandomAgent(env=env)
+    actor = RandomActor(env=env)
 
     # run algorithm
-    simu = Simulation(env=env, agent=agent, verb=False, render=True, plot=True, stat=True)
+    simu = Simulation(buffer_size=10000, dir_path="results/3_1_random",env=env, actor=actor, verb=False, render=True, plot=True, stat=True)
     simu.run(num_episodes=10)
 
-def heuristic_pendulum_agent():
+def heuristic_pendulum_actor():
     torques = np.linspace(0, 1, 11)
 
-    # create environment and agent
+    # create environment and actor
     env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
 
     sums = []
     stds = []
     for torque in torques:
-        # create agent
-        agent = HeuristicPendulumAgent(env=env, const_torque=torque)
+        # create actor
+        actor = HeuristicActor(env=env, const_torque=torque)
 
         # run algorithm
-        simu = Simulation(env=env, agent=agent, verb=False, render=False, plot=False, stat=True)
+        simu = Simulation(buffer_size=10000, dir_path="results/3_2_heuristic", env=env, actor=actor, verb=False, render=False, plot=False, stat=True)
         step_rewards = simu.run(num_episodes=10)
 
         # save mean and std of rewards
@@ -48,35 +49,35 @@ def heuristic_pendulum_agent():
     plt.legend()
     plt.show()
 
-def heuristic_qvalues_agent():
-    # create environment and agent
+def heuristic_qvalues_actor():
+    # create environment and actor
     env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
-    q_values = QValues(gamma=0.99, lr=1e-4)
-    agent = HeuristicPendulumAgent(env=env, const_torque=0.2)
+    critic = Critic(gamma=0.99, lr=1e-4)
+    actor = HeuristicActor(env=env, const_torque=1.0)
 
     # run algorithm
-    simu = Simulation(env=env, agent=agent, q_values=q_values, verb=False, render=False, plot=False, stat=False)
-    simu.run(num_episodes=60)
+    simu = Simulation(buffer_size=10000, dir_path="results/4_qvalues", env=env, actor=actor, critic=critic, verb=False, render=False, plot=True, stat=False)
+    simu.train(num_episodes=1050)
 
 def simple_ddpg():
-    # create environment and agent
+    # create environment and actor
     env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
-    q_values = QValues(gamma=0.99, lr=1e-4)
-    agent = DDPGAgent(env=env, q_values=q_values, lr=1e-4)
+    critic = Critic(gamma=0.99, lr=1e-4, tau=1.0)
+    actor = DDPGActor(env=env, critic=critic, lr=1e-4, noise_std=0.3, tau=1.0)
 
     # run algorithm
-    simu = Simulation(env=env, agent=agent, q_values=q_values, verb=False, render=False, plot=True, stat=False)
-    simu.train(num_episodes=500)
+    simu = Simulation(buffer_size=100000, dir_path="results/5_simple_ddpg", env=env, actor=actor, critic=critic, verb=False, render=False, plot=True, stat=False)
+    simu.train(num_episodes=1500)
 
 def target_ddpg():
-    # create environment and agent
+    # create environment and actor
     env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
-    q_values = QValues(gamma=0.99, lr=1e-4, tau=1)
-    agent = DDPGAgent(env=env, q_values=q_values, lr=1e-4, tau=1)
+    critic = Critic(gamma=0.99, lr=1e-4, tau=0.1)
+    actor = DDPGActor(env=env, critic=critic, lr=1e-4, tau=0.1, noise_std=0.3)
 
     # run algorithm
-    simu = Simulation(env=env, agent=agent, q_values=q_values, verb=False, render=False, plot=True, stat=False)
-    simu.train(num_episodes=100)
+    simu = Simulation(buffer_size=100000, dir_path="results/6_target_ddpg", env=env, actor=actor, critic=critic, verb=False, render=False, plot=True, stat=False)
+    simu.train(num_episodes=1500)
 
 
 if __name__ == "__main__":
@@ -84,32 +85,31 @@ if __name__ == "__main__":
     PART 3
         Random input
     """
-    # random_agent()
+    # random_actor()
 
     """
     PART 3
         Heuristic input, grid search for best constant torque
     """
-    # heuristic_pendulum_agent()
+    # heuristic_pendulum_actor()
 
     """
     PART 4
         Q-values learning
-        -> check loss curve (second peak)
         -> implement polar heatmaps
     """
-    # heuristic_qvalues_agent()
+    heuristic_qvalues_actor()
 
     """
     PART 5
         Simple DDPG
-        
+        -> test and debug
     """
     # simple_ddpg()
 
     """
     PART 6
         Target DDPG
-
+        -> test and debug
     """
-    target_ddpg()
+    # target_ddpg()

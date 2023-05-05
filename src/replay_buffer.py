@@ -1,21 +1,22 @@
 import numpy as np
+import torch
 import random
 
+# Look into: collection deque
 
 
 class ReplayBuffer():
-    def __init__(self, buffer_size, seed):
-        self._buffer_size = buffer_size
+    def __init__(self, buffer_size, seed):     
         self._buffer = { 
-            "state" : np.empty((buffer_size,3), dtype=float),
-            "action" : np.empty((buffer_size), dtype=float),
-            "reward" : np.empty((buffer_size), dtype=float),
-            "next_state" : np.empty((buffer_size,3), dtype=float),
-            "trunc" : np.empty((buffer_size), dtype=bool)
+            "state" : torch.empty((buffer_size,3), dtype=torch.float32, requires_grad=False),
+            "action" : torch.empty((buffer_size), dtype=torch.float32, requires_grad=False),
+            "reward" : torch.empty((buffer_size), dtype=torch.float32, requires_grad=False),
+            "next_state" : torch.empty((buffer_size,3), dtype=torch.float32, requires_grad=False),
+            "trunc" : torch.empty((buffer_size), dtype=torch.bool, requires_grad=False)
         }
         self._rng = np.random.default_rng(seed=seed)
-        # random.seed(seed)
 
+        self._buffer_size = buffer_size
         self._idx = 0
         self._full = False
 
@@ -23,11 +24,11 @@ class ReplayBuffer():
         # if len(self._buffer) >= self._buffer_size:
         #     self._buffer.pop(0)
         # self._buffer.append((state, action, reward, next_state, trunc))
-        self._buffer["state"][self._idx,:] = state
-        self._buffer["action"][self._idx] = action
-        self._buffer["reward"][self._idx] = reward
-        self._buffer["next_state"][self._idx,:] = next_state
-        self._buffer["trunc"][self._idx] = trunc
+        self._buffer["state"][self._idx,:] = self.numpy2tensor(state)
+        self._buffer["action"][self._idx] = self.numpy2tensor(action)
+        self._buffer["reward"][self._idx] = self.numpy2tensor(reward)
+        self._buffer["next_state"][self._idx,:] = self.numpy2tensor(next_state)
+        self._buffer["trunc"][self._idx] = self.numpy2tensor(trunc)
 
         # increment index
         self._idx = self._idx + 1
@@ -37,27 +38,16 @@ class ReplayBuffer():
 
     def sampleBatch(self, batch_size):
         
-        
-        # # convert nested buffer list to numpy array
-        # buffer = np.array(self._buffer, dtype=object)
-        
-        max_size = self._buffer_size
+        # return False if buffer is not full
         if not self._full:
-            max_size = self._idx
+            return None
 
         # raise error if batch size is larger than buffer size
         if batch_size > self._buffer_size:
-            raise ValueError("Batch size is larger than maximum buffer size")
+            raise ValueError("Batch size is larger than maximum buffer size")       
 
-        # # return False if buffer is smaller than batch size
-        # if batch_size >= max_size:
-        #     return False
-        
-        # return False if buffer is not full
-        if not self._full:
-            return False
-        
-        rand_idx = self._rng.choice(max_size, size=batch_size, replace=False) # TODO: should the samples be removed ???
+        # choose random samples
+        rand_idx = self._rng.choice(self._buffer_size, size=batch_size, replace=False) # TODO: should the samples be removed ???
         batch = { 
             "state" : self._buffer["state"][rand_idx,:],
             "action" : self._buffer["action"][rand_idx],
@@ -65,8 +55,23 @@ class ReplayBuffer():
             "next_state" : self._buffer["next_state"][rand_idx,:],
             "trunc" : self._buffer["trunc"][rand_idx]
         }
-        # batch = self._rng.choice(self._buffer, size=batch_size, replace=False) 
-        # batch = random.sample(self._buffer, batch_size)
+        return batch
+    
+    def numpy2tensor(self, array):
+        if not torch.is_tensor(array):
+            return torch.tensor(array, dtype=torch.float32, requires_grad=False)
+        else:
+            return array
+        
+    def detachClone(self, batch):
+        if batch is not None:
+            batch = { 
+                "state" : batch["state"].clone().detach(),
+                "action" : batch["action"].clone().detach(),
+                "reward" : batch["reward"].clone().detach(),
+                "next_state" : batch["next_state"].clone().detach(),
+                "trunc" : batch["trunc"].clone().detach()
+            }
         return batch
     
 

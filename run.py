@@ -6,6 +6,7 @@ import os
 from src.environment import NormalizedEnv
 from src.actor import RandomActor, HeuristicActor, DDPGActor
 from src.critic import Critic
+from src.gaussian_action_noise import GaussianActionNoise, OUActionNoise
 from src.simulation import Simulation
     
 
@@ -63,9 +64,10 @@ def simple_ddpg():
     # create environment and actor
     env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
     critic = Critic(gamma=0.99, lr=1e-4, tau=1.0)
-    actor = DDPGActor(env=env, critic=critic, lr=1e-4, noise_std=0.3, tau=1.0)
+    action_noise = GaussianActionNoise(sigma=0.3, seed=0)
+    actor = DDPGActor(env=env, critic=critic, action_noise=action_noise, lr=1e-4, noise_std=0.3, tau=1.0)
 
-    # run algorithm
+    # train algorithm
     simu = Simulation(buffer_size=100000, dir_path="results/5_simple_ddpg", env=env, actor=actor, critic=critic, verb=False, render=False, plot=True, stat=False)
     simu.train(num_episodes=1500)
 
@@ -73,11 +75,23 @@ def target_ddpg():
     # create environment and actor
     env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
     critic = Critic(gamma=0.99, lr=1e-4, tau=0.1)
-    actor = DDPGActor(env=env, critic=critic, lr=1e-4, tau=0.1, noise_std=0.3)
+    action_noise = GaussianActionNoise(sigma=0.3, seed=0)
+    actor = DDPGActor(env=env, critic=critic, action_noise=action_noise, lr=1e-4, tau=0.1, noise_std=0.3)
 
-    # run algorithm
+    # train algorithm
     simu = Simulation(buffer_size=100000, dir_path="results/6_target_ddpg", env=env, actor=actor, critic=critic, verb=False, render=False, plot=True, stat=False)
     simu.train(num_episodes=1500)
+
+def ou_noise_ddpg():
+    # create environment and actor
+    env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
+    critic = Critic(gamma=0.99, lr=1e-4, tau=0.1)
+    action_noise = OUActionNoise(sigma=0.3, theta=0.15, seed=0)
+    actor = DDPGActor(env=env, critic=critic, action_noise=action_noise, lr=1e-4, tau=0.1)
+
+    # train algorithm
+    simu = Simulation(buffer_size=10000, dir_path="results/7_ou_noise_ddpg", env=env, actor=actor, critic=critic, verb=False, render=False, plot=True, stat=False)
+    simu.train(num_episodes=250)
 
 
 if __name__ == "__main__":
@@ -98,7 +112,7 @@ if __name__ == "__main__":
         Q-values learning
         -> implement polar heatmaps
     """
-    heuristic_qvalues_actor()
+    # heuristic_qvalues_actor()
 
     """
     PART 5
@@ -113,3 +127,10 @@ if __name__ == "__main__":
         -> test and debug
     """
     # target_ddpg()
+
+    """
+    PART 7
+        Ornstein-Uhlenbeck noise
+        -> test and debug
+    """
+    ou_noise_ddpg()

@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 from src.actor_network import ActorNetwork
 from src.critic import Critic
-from src.gaussian_action_noise import GaussianActionNoise
+from src.gaussian_action_noise import ActionNoise
 from src.environment import NormalizedEnv
 
 
@@ -106,7 +106,7 @@ class HeuristicActor(Actor):
     
 
 class DDPGActor(Actor):
-    def __init__(self, env:NormalizedEnv, critic:Critic, lr:float, noise_std:float, tau:float=1.0) -> None:
+    def __init__(self, env:NormalizedEnv, critic:Critic, action_noise:ActionNoise, lr:float, tau:float=1.0) -> None:
         super().__init__(env)
 
         # hyperparameters
@@ -117,7 +117,7 @@ class DDPGActor(Actor):
         self.pnet = ActorNetwork()
         self.optimizer = torch.optim.Adam(self.pnet.parameters(), lr=self.lr)
         self.critic = critic
-        self.gaussian_action_noise = GaussianActionNoise(sigma=noise_std)
+        self.action_noise = action_noise
 
         # target models
         assert 0.0 <= self.tau and self.tau <= 1.0, "tau must be between 0 and 1"
@@ -136,7 +136,7 @@ class DDPGActor(Actor):
 
         # add noise if not deterministic
         if not deterministic:
-            action = self.gaussian_action_noise.getNoisyAction(action)
+            action = self.action_noise.getNoisyAction(action)
 
         return action
     

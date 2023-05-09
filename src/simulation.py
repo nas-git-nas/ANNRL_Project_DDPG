@@ -13,14 +13,14 @@ from src.actor import Actor
 
 class Simulation():
     def __init__(self, buffer_size, dir_path:str, env:NormalizedEnv, actor:Actor, critic:Critic=None, verb=False, render=False, plot=False, stat=False) -> None:
-        self.env = env
-        self.actor = actor
-        self.critic = critic
-
         self.verb = verb
         self.render = render
         self.plot = plot
         self.stat = stat
+
+        self.env = env
+        self.actor = actor
+        self.critic = critic
 
         if self.critic is not None:
             self.buffer = ReplayBuffer(buffer_size=buffer_size, seed=1)
@@ -110,6 +110,7 @@ class Simulation():
 
             # reset environment
             state = self.buffer.numpy2tensor(self.env.reset()[0]) # tuple contains as first element the state
+            self.actor.action_noise.reset()
             j = 0
             while True:
                 # take action and update environment
@@ -159,6 +160,16 @@ class Simulation():
             # plot actor training loss (if attribute 'trainStep' is implemented)
             if hasattr(self.actor, 'trainStep') and callable(self.actor.trainStep):
                 self.actor.plotLoss(path=self.dir_path)
+
+        # save models
+        if hasattr(self, "critic") and hasattr(self.critic, "qnet"):
+            torch.save(self.critic.qnet, os.path.join(self.dir_path, "qnet.pt"))
+        if hasattr(self, "critic") and hasattr(self.critic, "target_qnet"):
+            torch.save(self.critic.target_qnet, os.path.join(self.dir_path, "target_qnet.pt"))
+        if hasattr(self, "actor") and hasattr(self.actor, "pnet"):
+            torch.save(self.actor.pnet, os.path.join(self.dir_path, "pnet.pt"))
+        if hasattr(self, "actor") and hasattr(self.actor, "target_pnet"):
+            torch.save(self.actor.target_pnet, os.path.join(self.dir_path, "target_pnet.pt"))
 
         return step_rewards
     

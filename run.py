@@ -13,7 +13,7 @@ def random_actor():
     # create environment and actor
     env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
     critic = None
-    buffer = None
+    buffer = ReplayBuffer(buffer_size=100000, seed=1)
     actor = RandomActor()
 
     # run algorithm
@@ -32,7 +32,7 @@ def heuristic_pendulum_actor():
     # create environment and actor
     env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
     critic = None
-    buffer = None
+    buffer = ReplayBuffer(buffer_size=100000, seed=1)
 
     sums = []
     stds = []
@@ -118,13 +118,31 @@ def target_ddpg():
     )
     simu.train(num_episodes=1000, batch_size=128)
 
+def ou_ddpg():
+    # create environment, critic, actor, noise and buffer
+    env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
+    critic = Critic(gamma=0.99, lr=1e-4, tau=1.0)
+    action_noise = OUActionNoise(sigma=0.3, theta=0.5, seed=0)
+    actor = Actor(lr=1e-4, tau=0.1, noise=action_noise)
+    buffer = ReplayBuffer(buffer_size=100000, seed=1)
+
+    # train algorithm
+    simu = Simulation(
+        dir_path="results/5_simple_ddpg", 
+        env=env, 
+        critic = critic,
+        actor = actor, 
+        buffer=buffer,
+    )
+    simu.train(num_episodes=1000, batch_size=128)
+
 
 if __name__ == "__main__":
     """
     PART 3
         Random input
     """
-    # random_actor()
+    random_actor()
 
     """
     PART 3
@@ -151,4 +169,11 @@ if __name__ == "__main__":
         Target DDPG
         -> test and debug
     """
-    target_ddpg()
+    # target_ddpg()
+
+    """
+    PART 7
+        Orstein-Uhlenbeck noise
+        -> test and debug
+    """
+    # ou_ddpg()

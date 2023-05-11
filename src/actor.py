@@ -3,117 +3,108 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 
-from src.critic_network import CriticNetwork
-from src.actor_network import ActorNetwork, RandomActor, HeuristicActor
+from src.actor_network import ActorNetwork
+from src.action_noise import ActionNoise
+# import src.critic as critic
+
+# try:
+#     Critic
+# except NameError:
+#     from src.critic import Critic
+
+class RandomActor():
+    def __init__(self):
+        pass
+        
+    def computeActions(self, states, target=False, deterministic=True):
+        if target or not deterministic:
+            raise ValueError("Random actor does not have a target network or noise")
+
+        # generate random actions between -1 and 1
+        actions = torch.rand((states.shape[0],1))
+        return 2*actions - 1
+    
+
+class HeuristicActor():
+    def __init__(self, const_torque):
+        if const_torque > 1 or const_torque < 0:
+            raise ValueError("Constant torque must be between 0 and 1")
+        self.const_torque = const_torque
+
+    def computeActions(self, states, target=False, deterministic=True):
+        if target or not deterministic:
+            raise ValueError("Heuristic actor does not have a target network or noise")
+        
+        # generate heuristic actions
+        actions = torch.empty((states.shape[0], self.action_size))
+        actions[:,0] = -torch.sign(states[:,0]) * torch.sign(states[:,2]) * self.const_torque
+        return actions
 
 
-class CriticActor():
-    def __init__(self, gamma, lr, tau, critic_type, actor_type):
+class Actor():
+    def __init__(self, lr, tau, noise:ActionNoise):
         # hyperparameters
-        self.gamma = gamma
         self.lr = lr
         self.tau = tau
-        self.critic_type = critic_type
-        self.actor_type = actor_type
-       
-        # initialize critic networks
-        if critic_type == "network":
-            self.critic_net = CriticNetwork()
-        elif critic_type == "None":
-            self.critic_net = None
-        else:
-            raise ValueError("critic_type must be one of: network, None")
+
+        self.noise = noise
         
         # initialize actor networks
-        if actor_type == "network":
-            self.actor_net = ActorNetwork()
-        elif actor_type == "random":
-            self.actor_net = RandomActor()
-        elif actor_type == "heuristic":
-            self.actor_net = HeuristicActor()
-        else:
-            raise ValueError("actor_type must be one of: network, random, heuristic")
+        self.actor_net = ActorNetwork()
 
         # intialize critic and actor optimizers
-        self.critic_optimizer = torch.optim.Adam(self.critic_net.parameters(), lr=self.lr)
         self.actor_optimizer = torch.optim.Adam(self.actor_net.parameters(), lr=self.lr)
 
         # initialize target networks
-        self.critic_target_net = CriticNetwork()
         self.actor_target_net = ActorNetwork()
 
         # logging values
-        self.critic_losses = []
-        self.actor_losses = []
+        self.log_losses = []
 
+    def saveModels(self, path):
+        torch.save(self.actor_net, os.path.join(path, "actor_net.pt"))
+        torch.save(self.actor_target_net, os.path.join(path, "actor_target_net.pt"))
 
-    def trainStep(self, batch):
+    def computeActions(self, states, target=False, deterministic=True):
+        if target:
+            actions = self.actor_target_net.forward(states=states)
+        else:
+            actions = self.actor_net.forward(states=states)
+
+        if not deterministic:
+            actions += self.noise.getNoisyAction(actions=actions)
+        return actions
+
+    def trainStep(self, batch:dict, critic):
         # do not train if relay buffer is not large enough
         if batch is None:
-            self.critic_losses.append(0)
-            self.actor_losses.append(0)
+            self.log_losses.append(0)
             return
-                  
-        if self.critic_type == "network":
-            # gradient descent step for critic network
-            self.critic_optimizer.zero_grad()
-            critic_loss = self._computeCriticsLoss(batch=batch)
-            critic_loss.backward()
-            self.critic_optimizer.step()
-            self.critic_losses.append(critic_loss.item())
-        else:
-            self.critic_losses.append(0)
 
-        if self.actor_type == "network":
-            # freeze critic network to avoid unnecessary computations of gradients
-            for p in self.critic_net.parameters():
-                p.requires_grad = False        
+        # freeze critic network to avoid unnecessary computations of gradients
+        for p in critic.critic_net.parameters():
+            p.requires_grad = False        
 
-            # gradient descent step for actor network
-            self.actor_optimizer.zero_grad()
-            actor_loss = self._computeActorLoss(batch=batch)
-            actor_loss.backward()
-            self.actor_optimizer.step()
-            self.actor_losses.append(actor_loss.item())
+        # gradient descent step for actor network
+        self.actor_optimizer.zero_grad()
+        actor_loss = self._computeActorLoss(batch=batch, critic=critic)
+        actor_loss.backward()
+        self.actor_optimizer.step()
+        self.log_losses.append(actor_loss.item())
 
-            # unfreeze critic network
-            for p in self.critic_net.parameters():
-                p.requires_grad = True
-        else:
-            self.actor_losses.append(0)
+        # unfreeze critic network
+        for p in critic.critic_net.parameters():
+            p.requires_grad = True
 
         # update target network
         self._updateTargetNetworks()
-
-    def _computeCriticsLoss(self, batch):
-        # calculate next actions and target, with torch.no_grad()
-        with torch.no_grad():
-            # calculate next actions and next Q values
-            if self.tau == 1.0:
-                next_actions = self.actor_net(batch["next_state"])
-                next_q_values = self.critic_net.forward(states=batch["next_state"], actions=next_actions)
-            else:
-                next_actions = self.actor_target_net(batch["next_state"])
-                next_q_values = self.critic_target_net.forward(states=batch["next_state"], actions=next_actions)
-
-            # set next Q values to 0 if episode is truncated              
-            next_q_values = torch.where(batch["trunc"].reshape_as(next_q_values), 0, next_q_values)
-            
-            # calculate target
-            targets = batch["reward"].reshape_as(next_q_values) + self.gamma * next_q_values
-
-        # calculate target and expected cumulative rewards
-        q_values = self.critic_net.forward(states=batch["state"], actions=batch["action"])
-        
-        # calculate loss and log it
-        return 0.5 * torch.pow(q_values - targets, 2).mean()
     
-    def _computeActorLoss(self, batch):
+    def _computeActorLoss(self, batch, critic):
         # estimate action from state
-        actions = self.actor_net.forward(states=batch['state'])
+        actions = self.computeActions(states=batch['state'], target=False, deterministic=True)
 
         # calculate q values for state-action pairs
-        q_values = self.critic_net.forward(states=batch['state'], actions=actions)
+        q_values = critic.computeQValues(states=batch['state'], actions=actions, target=False)
 
         # calculate loss      
         return - q_values.mean()
@@ -123,31 +114,14 @@ class CriticActor():
             return
         
         with torch.no_grad():
-            # update critic target network
-            if self.critic_type == "network":          
-                critic_net_dict = self.critic_net.state_dict()
-                critic_target_net_dict = self.critic_target_net.state_dict()
-                for key in critic_target_net_dict:
-                    critic_target_net_dict[key] = self.tau * critic_net_dict[key] + (1-self.tau) * critic_target_net_dict[key]
-                self.critic_target_net.load_state_dict(critic_target_net_dict)
-
             # update actor target network
-            if self.actor_type == "network":
-                actor_net_dict = self.actor_net.state_dict()
-                actor_target_net_dict = self.actor_target_net.state_dict()
-                for key in actor_target_net_dict:
-                    actor_target_net_dict[key] = self.tau * actor_net_dict[key] + (1-self.tau) * actor_target_net_dict[key]
-                self.actor_target_net.load_state_dict(actor_target_net_dict)
+            actor_net_dict = self.actor_net.state_dict()
+            actor_target_net_dict = self.actor_target_net.state_dict()
+            for key in actor_target_net_dict:
+                actor_target_net_dict[key] = self.tau * actor_net_dict[key] + (1-self.tau) * actor_target_net_dict[key]
+            self.actor_target_net.load_state_dict(actor_target_net_dict)
 
-    def saveModels(self, path):
-        if hasattr(self, "critic_net"):
-            torch.save(self.critic_net, os.path.join(path, "critic_net.pt"))
-        if hasattr(self, "critic_target_net"):
-            torch.save(self.critic_target_net, os.path.join(path, "critic_target_net.pt"))
-        if hasattr(self, "actor_net"):
-            torch.save(self.actor_net, os.path.join(path, "actor_net.pt"))
-        if hasattr(self, "actor_target_net"):
-            torch.save(self.actor_target_net, os.path.join(path, "actor_target_net.pt"))
+
     
     def plotLosses(self, path):
         i = 0
@@ -155,7 +129,7 @@ class CriticActor():
         a_losses = []
         while i < len(self.critic_losses):
             c_losses.append(np.mean(self.critic_losses[i:i+200]))
-            a_losses.append(np.mean(self.actor_losses[i:i+200]))
+            a_losses.append(np.mean(self.log_losses[i:i+200]))
             i += 200
 
         fig = plt.figure()

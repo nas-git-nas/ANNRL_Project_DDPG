@@ -38,16 +38,18 @@ class ReplayBuffer():
 
     def sampleBatch(self, batch_size):
         
-        # return False if buffer is not full
-        if not self._full:
-            return None
+        # determine current buffer size
+        if self._full:
+            current_buffer_size = self._buffer_size
+        else:
+            current_buffer_size = self._idx
 
-        # raise error if batch size is larger than buffer size
-        if batch_size > self._buffer_size:
-            raise ValueError("Batch size is larger than maximum buffer size")       
+        # return None if batch_size is larger than current buffer size
+        if batch_size > current_buffer_size:
+            return None  
 
         # choose random samples
-        rand_idx = self._rng.choice(self._buffer_size, size=batch_size, replace=False) # TODO: should the samples be removed ???
+        rand_idx = self._rng.choice(current_buffer_size, size=batch_size, replace=False) # TODO: should the samples be removed ???
         batch = { 
             "state" : self._buffer["state"][rand_idx,:],
             "action" : self._buffer["action"][rand_idx],

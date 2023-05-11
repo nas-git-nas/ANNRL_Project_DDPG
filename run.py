@@ -1,39 +1,54 @@
 import gym
 import numpy as np
 import matplotlib.pyplot as plt
-import os
 
 from src.environment import NormalizedEnv
-from src.actor import RandomActor, HeuristicActor, DDPGActor
 from src.critic import Critic
-from src.gaussian_action_noise import GaussianActionNoise, OUActionNoise
+from src.actor import Actor, RandomActor, HeuristicActor
+from src.action_noise import GaussianActionNoise, OUActionNoise
+from src.replay_buffer import ReplayBuffer
 from src.simulation import Simulation
-    
 
 def random_actor():
     # create environment and actor
     env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
-    actor = RandomActor(env=env)
+    critic = None
+    buffer = None
+    actor = RandomActor()
 
     # run algorithm
-    simu = Simulation(buffer_size=10000, dir_path="results/3_1_random",env=env, actor=actor, verb=False, render=True, plot=True, stat=True)
-    simu.run(num_episodes=10)
+    simu = Simulation(
+        dir_path="results/5_simple_ddpg", 
+        env=env, 
+        critic = critic,
+        actor = actor, 
+        buffer=buffer,
+    )
+    step_rewards = simu.run(num_episodes=10, render=False)
 
 def heuristic_pendulum_actor():
     torques = np.linspace(0, 1, 11)
 
     # create environment and actor
     env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
+    critic = None
+    buffer = None
 
     sums = []
     stds = []
     for torque in torques:
         # create actor
-        actor = HeuristicActor(env=env, const_torque=torque)
+        actor = HeuristicActor(const_torque=torque)
 
         # run algorithm
-        simu = Simulation(buffer_size=10000, dir_path="results/3_2_heuristic", env=env, actor=actor, verb=False, render=False, plot=False, stat=True)
-        step_rewards = simu.run(num_episodes=10)
+        simu = Simulation(
+            dir_path="results/5_simple_ddpg", 
+            env=env, 
+            critic = critic,
+            actor = actor, 
+            buffer=buffer,
+        )
+        step_rewards = simu.run(num_episodes=10, render=False)
 
         # save mean and std of rewards
         sums.append(np.mean(step_rewards))
@@ -51,47 +66,57 @@ def heuristic_pendulum_actor():
     plt.show()
 
 def heuristic_qvalues_actor():
-    # create environment and actor
+    # create environment, critic, actor, noise and buffer
     env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
-    critic = Critic(gamma=0.99, lr=1e-4)
-    actor = HeuristicActor(env=env, const_torque=1.0)
+    critic = Critic(gamma=0.99, lr=1e-4, tau=1.0)
+    actor = HeuristicActor(const_torque=1.0)
+    buffer = ReplayBuffer(buffer_size=100000, seed=1)
 
-    # run algorithm
-    simu = Simulation(buffer_size=10000, dir_path="results/4_qvalues", env=env, actor=actor, critic=critic, verb=False, render=False, plot=True, stat=False)
-    simu.train(num_episodes=1050)
+    # train algorithm
+    simu = Simulation(
+        dir_path="results/5_simple_ddpg", 
+        env=env, 
+        critic = critic,
+        actor = actor, 
+        buffer=buffer,
+    )
+    simu.train(num_episodes=1000, batch_size=128)
 
 def simple_ddpg():
-    # create environment and actor
+    # create environment, critic, actor, noise and buffer
     env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
     critic = Critic(gamma=0.99, lr=1e-4, tau=1.0)
     action_noise = GaussianActionNoise(sigma=0.3, seed=0)
-    actor = DDPGActor(env=env, critic=critic, action_noise=action_noise, lr=1e-4, noise_std=0.3, tau=1.0)
+    actor = Actor(lr=1e-4, tau=1.0, noise=action_noise)
+    buffer = ReplayBuffer(buffer_size=100000, seed=1)
 
     # train algorithm
-    simu = Simulation(buffer_size=100000, dir_path="results/5_simple_ddpg", env=env, actor=actor, critic=critic, verb=False, render=False, plot=True, stat=False)
-    simu.train(num_episodes=1500)
+    simu = Simulation(
+        dir_path="results/5_simple_ddpg", 
+        env=env, 
+        critic = critic,
+        actor = actor, 
+        buffer=buffer,
+    )
+    simu.train(num_episodes=1000, batch_size=128)
 
 def target_ddpg():
-    # create environment and actor
+    # create environment, critic, actor, noise and buffer
     env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
-    critic = Critic(gamma=0.99, lr=1e-4, tau=0.1)
+    critic = Critic(gamma=0.99, lr=1e-4, tau=1.0)
     action_noise = GaussianActionNoise(sigma=0.3, seed=0)
-    actor = DDPGActor(env=env, critic=critic, action_noise=action_noise, lr=1e-4, tau=0.1, noise_std=0.3)
+    actor = Actor(lr=1e-4, tau=0.1, noise=action_noise)
+    buffer = ReplayBuffer(buffer_size=100000, seed=1)
 
     # train algorithm
-    simu = Simulation(buffer_size=100000, dir_path="results/6_target_ddpg", env=env, actor=actor, critic=critic, verb=False, render=False, plot=True, stat=False)
-    simu.train(num_episodes=1500)
-
-def ou_noise_ddpg():
-    # create environment and actor
-    env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
-    critic = Critic(gamma=0.99, lr=1e-4, tau=0.1)
-    action_noise = OUActionNoise(sigma=0.3, theta=0.15, seed=0)
-    actor = DDPGActor(env=env, critic=critic, action_noise=action_noise, lr=1e-4, tau=0.1)
-
-    # train algorithm
-    simu = Simulation(buffer_size=10000, dir_path="results/7_ou_noise_ddpg", env=env, actor=actor, critic=critic, verb=False, render=False, plot=True, stat=False)
-    simu.train(num_episodes=250)
+    simu = Simulation(
+        dir_path="results/5_simple_ddpg", 
+        env=env, 
+        critic = critic,
+        actor = actor, 
+        buffer=buffer,
+    )
+    simu.train(num_episodes=1000, batch_size=128)
 
 
 if __name__ == "__main__":
@@ -126,11 +151,4 @@ if __name__ == "__main__":
         Target DDPG
         -> test and debug
     """
-    # target_ddpg()
-
-    """
-    PART 7
-        Ornstein-Uhlenbeck noise
-        -> test and debug
-    """
-    ou_noise_ddpg()
+    target_ddpg()

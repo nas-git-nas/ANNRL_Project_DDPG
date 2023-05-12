@@ -31,14 +31,22 @@ class HeuristicActor():
             raise ValueError("Constant torque must be between 0 and 1")
         self.const_torque = const_torque
 
+        self.log_losses = []
+    
+    def saveModels(self, path):
+        pass
+
     def computeActions(self, states, target=False, deterministic=True):
-        if target or not deterministic:
-            raise ValueError("Heuristic actor does not have a target network or noise")
+        # if target or not deterministic:
+        #     raise ValueError("Heuristic actor does not have a target network or noise")
         
         # generate heuristic actions
-        actions = torch.empty((states.shape[0], self.action_size))
+        actions = torch.empty((states.shape[0], 1))
         actions[:,0] = -torch.sign(states[:,0]) * torch.sign(states[:,2]) * self.const_torque
         return actions
+    
+    def trainStep(self, batch, critic):
+        self.log_losses.append(0)
 
 
 class Actor():

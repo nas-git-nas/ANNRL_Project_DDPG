@@ -35,7 +35,7 @@ class Simulation():
             shutil.rmtree(self.dir_path)
         os.mkdir(self.dir_path)
 
-    def run(self, num_episodes, render):
+    def run(self, num_episodes, render, plot):
         # create figure for rendering
         if render:
             fig = plt.figure()
@@ -43,15 +43,16 @@ class Simulation():
 
         # run episodes
         step_rewards = []
+        cum_rewards = []
         for i in range(num_episodes):
 
             # reset environment
-            state = self.buffer.numpy2tensor(self.env.reset()[0]) # tuple contains as first element the state
+            state = self.buffer.numpy2tensor(self.env.reset()[0], shape_type="state") # tuple contains as first element the state
             while True:
                 # take action and update environment
                 action = self.actor.computeActions(states=state, target=False, deterministic=True)
-                next_state, reward, term, trunc, info = self.env.step(action=action.detach().numpy()) # TODO: action has wrond dimensions
-                state = self.buffer.numpy2tensor(next_state)
+                next_state, reward, term, trunc, info = self.env.step(action=action.detach().numpy().flatten()) # TODO: action has wrond dimensions
+                state = self.buffer.numpy2tensor(next_state, shape_type="state")
 
                 # log reward
                 step_rewards.append(reward)
@@ -61,10 +62,13 @@ class Simulation():
                     env_screen = self.env.render()
                     frames.append([plt.imshow(env_screen)])       
 
-                # check if episode is terminated or truncated
-                if term or trunc:
+                # check if episode is truncated
+                if trunc:
+                    assert len(step_rewards) % 200 == 0 # verfiy that episode length is 200
                     break
 
+            # log cummulative reward
+            cum_rewards.append(np.sum(step_rewards[i*200:]))
 
         # show animation of environment
         if render:
@@ -72,29 +76,32 @@ class Simulation():
             plt.show()
 
         # plot rewards
-        self._plotReward(step_rewards=step_rewards, path=self.dir_path)
+        if plot:
+            self._plotReward(step_rewards=step_rewards, path=self.dir_path)
 
-        return step_rewards
+        return step_rewards, cum_rewards
     
     def train(self, num_episodes, batch_size):
         # run episodes
         step_rewards = []
+        cum_rewards = []
         for i in range(num_episodes):
+            # print training progress
             if i%10 == 0:
                 print(f"Training episode: {i}/{num_episodes}")
 
             # reset environment
-            state = self.buffer.numpy2tensor(self.env.reset()[0]) # tuple contains as first element the state
+            state = self.buffer.numpy2tensor(self.env.reset()[0], shape_type="state") # tuple contains as first element the state
             if hasattr(self.actor, "noise"):
                 self.actor.noise.reset()
             while True:
                 # take action and update environment
-                action = self.actor.computeActions(state=state, target=False, deterministic=False)
-                next_state, reward, term, trunc, info = self.env.step(action=action.detach().numpy())
+                action = self.actor.computeActions(states=state, target=False, deterministic=False)
+                next_state, reward, term, trunc, info = self.env.step(action=action.detach().numpy().flatten())
 
                 # add transition to replay buffer
                 self.buffer.addTransition(state=state, action=action, reward=reward, next_state=next_state, trunc=trunc)
-                state = self.buffer.numpy2tensor(next_state)
+                state = self.buffer.numpy2tensor(next_state, shape_type="state")
 
                 # train Q and policy networks if replay buffer is large enough
                 batch = self.buffer.sampleBatch(batch_size=batch_size)
@@ -104,34 +111,37 @@ class Simulation():
                 # log reward
                 step_rewards.append(reward)
 
-                # check if episode is terminated or truncated
-                if term or trunc:
+                # check if episode is truncated
+                if trunc:
+                    assert len(step_rewards) % 200 == 0 # verfiy that episode length is 200
                     break
 
+            # log cummulative reward
+            cum_rewards.append(np.sum(step_rewards[i*200:]))
+
         # plot rewards, losses and heat maps
-        self._plotReward(step_rewards=step_rewards, path=self.dir_path)
+        self._plotReward(step_rewards=step_rewards, cum_rewards=cum_rewards, path=self.dir_path)
         self._plotLosses(critic_losses=self.critic.log_losses, actor_losses=self.actor.log_losses, path=self.dir_path)
         self._plotHeatmap(path=self.dir_path)
+        self._plotPolarHeatMap(path=self.dir_path)
 
         # save models
         self.critic.saveModels(path=self.dir_path)
         self.actor.saveModels(path=self.dir_path)
 
-        return step_rewards
+        return step_rewards, cum_rewards
 
-    def _plotReward(self, step_rewards, path):
+    def _plotReward(self, step_rewards, cum_rewards, path):
         # assure that episode length is 200
         assert len(step_rewards) % 200 == 0
 
         # average losses of one episode
-        episode_sum = []
         episode_mean = []
         episode_per5 = []
         episode_per95 = []
         i = 0
         while i < len(step_rewards):
             episodes_rewards = np.array(step_rewards[i:i+200])
-            episode_sum.append(episodes_rewards.sum())
             episode_mean.append(episodes_rewards.mean())
             episode_per5.append(np.percentile(episodes_rewards, 5))
             episode_per95.append(np.percentile(episodes_rewards, 95))
@@ -140,7 +150,7 @@ class Simulation():
         fig, axs = plt.subplots(nrows=2, ncols=1, figsize=(10, 10))
         fig.suptitle("Rewards per episode")
 
-        axs[0].plot(range(len(episode_mean)), episode_sum, label="Cummulative", color="red")
+        axs[0].plot(range(len(episode_mean)), cum_rewards, label="Cummulative", color="red")
         axs[0].set_xlabel("Episode")
         axs[0].set_ylabel("Reward")
         axs[0].legend()
@@ -162,7 +172,7 @@ class Simulation():
         c_losses = []
         a_losses = []
         i = 0
-        while i < len(self.critic_losses):
+        while i < len(critic_losses):
             c_losses.append(np.mean(critic_losses[i:i+200]))
             a_losses.append(np.mean(actor_losses[i:i+200]))
             i += 200
@@ -205,10 +215,10 @@ class Simulation():
             state_copy = state.detach().clone()
 
             torque = t * torch.ones(state_copy.shape[0])
-            v_val = self.critic.computeQValues(states=state_copy, actions=torque, target=False)
-            v_val = v_val.reshape(angle.shape).detach().numpy()
+            q_val = self.critic.computeQValues(states=state_copy, actions=torque, target=False)
+            q_val = q_val.reshape(angle.shape).detach().numpy()
             
-            colorbar = axs[i,j].pcolormesh(angle, vel, v_val)
+            colorbar = axs[i,j].pcolormesh(angle, vel, q_val)
             axs[i,j].axis([np.min(angle), np.max(angle), np.min(vel), np.max(vel)])
             fig.colorbar(colorbar, ax=axs[i,j])
             axs[i,j].set_xlabel("Angle [rad]")
@@ -216,4 +226,36 @@ class Simulation():
             axs[i,j].set_title(f"Torque = {2*t}Nm")
 
         plt.savefig(os.path.join(path, "heatmap.pdf"))
+
+    def _plotPolarHeatMap(self, path):
+        print("inside polar heatmap")
+        res_angle = 360
+        res_radial = 10
+
+        radius = np.linspace(0, 1, res_radial)
+        angle = np.linspace(-np.pi, np.pi, res_angle)
+
+        r, a = np.meshgrid(radius, angle)
+        cos_a = torch.cos(torch.tensor(a, dtype=torch.float32)).reshape(-1,1)
+        sin_a = torch.sin(torch.tensor(a, dtype=torch.float32)).reshape(-1,1)   
+
+        fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(12,7), subplot_kw={'projection':"polar"})      
+        
+        for i, v in enumerate([0, 2.5]):
+            for j, torque in enumerate([-1, 0, 1]):
+                vel = v * torch.ones_like(cos_a, dtype=torch.float32)
+                states = torch.concat((cos_a, sin_a, vel), axis=1)
+                actions = torque * torch.ones_like(cos_a, dtype=torch.float32)
+                q_val = self.critic.computeQValues(states=states, actions=actions.reshape(-1,1), target=False)
+
+                q_val = q_val.detach().numpy().reshape(res_angle, res_radial)
+                cb = axs[i,j].pcolormesh(a, r, q_val)
+                axs[i,j].plot(angle, r, color='k', ls='none') 
+                fig.colorbar(cb, ax=axs[i,j])
+                axs[i,j].set_yticks([],[])
+                axs[i,j].set_theta_offset(np.pi/2)
+                axs[i,j].set_title(f"Torque={2*torque}Nm, vel={v}m/s")
+
+        plt.savefig(os.path.join(path, "polar_heatmap.pdf"))
+
     

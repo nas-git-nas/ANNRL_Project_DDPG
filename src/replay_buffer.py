@@ -24,11 +24,11 @@ class ReplayBuffer():
         # if len(self._buffer) >= self._buffer_size:
         #     self._buffer.pop(0)
         # self._buffer.append((state, action, reward, next_state, trunc))
-        self._buffer["state"][self._idx,:] = self.numpy2tensor(state)
-        self._buffer["action"][self._idx] = self.numpy2tensor(action)
-        self._buffer["reward"][self._idx] = self.numpy2tensor(reward)
-        self._buffer["next_state"][self._idx,:] = self.numpy2tensor(next_state)
-        self._buffer["trunc"][self._idx] = self.numpy2tensor(trunc)
+        self._buffer["state"][self._idx,:] = self.numpy2tensor(state, shape_type="state")
+        self._buffer["action"][self._idx] = self.numpy2tensor(action, shape_type="action")
+        self._buffer["reward"][self._idx] = self.numpy2tensor(reward, shape_type="reward")
+        self._buffer["next_state"][self._idx,:] = self.numpy2tensor(next_state, shape_type="next_state")
+        self._buffer["trunc"][self._idx] = self.numpy2tensor(trunc, shape_type="trunc")
 
         # increment index
         self._idx = self._idx + 1
@@ -59,11 +59,28 @@ class ReplayBuffer():
         }
         return batch
     
-    def numpy2tensor(self, array):
+    def numpy2tensor(self, array, shape_type):
+        # convert numpy array to tensor if necessary
         if not torch.is_tensor(array):
-            return torch.tensor(array, dtype=torch.float32, requires_grad=False)
+            tensor = torch.tensor(array, dtype=torch.float32, requires_grad=False)
         else:
-            return array
+            tensor = array
+
+        # reshape tensor
+        if shape_type == "state":
+            tensor = tensor.reshape((-1,3))
+        elif shape_type == "action":
+            tensor = tensor.reshape((-1,1))
+        elif shape_type == "reward":
+            tensor = tensor.reshape((-1,1))
+        elif shape_type == "next_state":
+            tensor = tensor.reshape((-1,3))
+        elif shape_type == "trunc":
+            tensor = tensor.reshape((-1,1))
+        else:
+            raise ValueError("Invalid shape_type: {}".format(shape_type))
+        
+        return tensor
         
     def detachClone(self, batch):
         if batch is not None:

@@ -17,5 +17,6 @@ axs[0].plot(azm, r, color='k', ls='none')
 fig.colorbar(cb, ax=axs[0])
 axs[0].set_yticks([],[])
 axs[0].set_theta_offset(np.pi/2)
+axs[0].set_theta_direction(-1)
 
 plt.show()

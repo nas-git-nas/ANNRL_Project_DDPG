@@ -95,7 +95,7 @@ def heuristic_qvalues_actor():
         actor = actor, 
         buffer=buffer,
     )
-    simu.train(num_episodes=10, batch_size=128)
+    simu.train(num_episodes=1000, batch_size=128)
 
 def simple_ddpg():
     # create environment, critic, actor, noise and buffer
@@ -114,13 +114,17 @@ def simple_ddpg():
         buffer=buffer,
     )
     simu.train(num_episodes=1000, batch_size=128)
+    simu.run(num_episodes=100, render=False, plot=True)
 
 def target_ddpg():
+    # target network update
+    tau = 1.0
+
     # create environment, critic, actor, noise and buffer
     env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
-    critic = Critic(gamma=0.99, lr=1e-4, tau=1.0)
+    critic = Critic(gamma=0.99, lr=1e-4, tau=tau)
     action_noise = GaussianActionNoise(sigma=0.3, seed=0)
-    actor = Actor(lr=1e-4, tau=0.1, noise=action_noise)
+    actor = Actor(lr=1e-4, tau=tau, noise=action_noise)
     buffer = ReplayBuffer(buffer_size=100000, seed=1)
 
     # train algorithm
@@ -132,24 +136,26 @@ def target_ddpg():
         buffer=buffer,
     )
     simu.train(num_episodes=1000, batch_size=128)
+    simu.run(num_episodes=100, render=False, plot=True)
 
 def ou_ddpg():
     # create environment, critic, actor, noise and buffer
     env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
-    critic = Critic(gamma=0.99, lr=1e-4, tau=1.0)
-    action_noise = OUActionNoise(sigma=0.3, theta=0.5, seed=0)
-    actor = Actor(lr=1e-4, tau=0.1, noise=action_noise)
+    critic = Critic(gamma=0.99, lr=1e-4, tau=0.01)
+    action_noise = OUActionNoise(sigma=0.3, theta=0.0, seed=0)
+    actor = Actor(lr=1e-4, tau=0.01, noise=action_noise)
     buffer = ReplayBuffer(buffer_size=100000, seed=1)
 
     # train algorithm
     simu = Simulation(
-        dir_path="results/ou_noise_ddpg", 
+        dir_path="results/7_ou_noise_ddpg", 
         env=env, 
         critic = critic,
         actor = actor, 
         buffer=buffer,
     )
     simu.train(num_episodes=1000, batch_size=128)
+    simu.run(num_episodes=100, render=False, plot=True)
 
 
 if __name__ == "__main__":
@@ -170,7 +176,7 @@ if __name__ == "__main__":
         Q-values learning
         -> implement polar heatmaps
     """
-    heuristic_qvalues_actor()
+    # heuristic_qvalues_actor()
 
     """
     PART 5
@@ -184,7 +190,7 @@ if __name__ == "__main__":
         Target DDPG
         -> test and debug
     """
-    # target_ddpg()
+    target_ddpg()
 
     """
     PART 7

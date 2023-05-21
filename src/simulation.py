@@ -45,6 +45,9 @@ class Simulation():
         step_rewards = []
         cum_rewards = []
         for i in range(num_episodes):
+            # print testing progress
+            if i%10 == 0:
+                print(f"Testing episode: {i}/{num_episodes}")
 
             # reset environment
             state = self.buffer.numpy2tensor(self.env.reset()[0], shape_type="state") # tuple contains as first element the state
@@ -77,11 +80,15 @@ class Simulation():
 
         # plot rewards
         if plot:
-            self._plotReward(step_rewards=step_rewards, path=self.dir_path)
+            self._plotReward(step_rewards=step_rewards, cum_rewards=cum_rewards, path=self.dir_path, title="reward_testing")
 
         return step_rewards, cum_rewards
     
     def train(self, num_episodes, batch_size):
+        # plot heat maps before training
+        self._plotHeatmap(path=self.dir_path, title="heatmap_before_training")
+        self._plotPolarHeatMap(path=self.dir_path, title="polar_heatmap_before_training")
+
         # run episodes
         step_rewards = []
         cum_rewards = []
@@ -120,7 +127,7 @@ class Simulation():
             cum_rewards.append(np.sum(step_rewards[i*200:]))
 
         # plot rewards, losses and heat maps
-        self._plotReward(step_rewards=step_rewards, cum_rewards=cum_rewards, path=self.dir_path)
+        self._plotReward(step_rewards=step_rewards, cum_rewards=cum_rewards, path=self.dir_path, title="reward_training")
         self._plotLosses(critic_losses=self.critic.log_losses, actor_losses=self.actor.log_losses, path=self.dir_path)
         self._plotHeatmap(path=self.dir_path)
         self._plotPolarHeatMap(path=self.dir_path)
@@ -131,7 +138,7 @@ class Simulation():
 
         return step_rewards, cum_rewards
 
-    def _plotReward(self, step_rewards, cum_rewards, path):
+    def _plotReward(self, step_rewards, cum_rewards, path, title="reward"):
         # assure that episode length is 200
         assert len(step_rewards) % 200 == 0
 
@@ -154,16 +161,16 @@ class Simulation():
         axs[0].set_xlabel("Episode")
         axs[0].set_ylabel("Reward")
         axs[0].legend()
-        axs[0].set_title("Cummulative reward per episode")
+        axs[0].set_title(f"Cummulative reward per episode (avg={np.round(np.mean(cum_rewards), 3)})")
 
         axs[1].plot(range(len(episode_mean)), episode_mean, label="Mean", color="red")
         axs[1].fill_between(x=range(len(episode_mean)), y1=episode_per5, y2=episode_per95, alpha=0.2, color="blue", label="Percentile 5-95%")
         axs[1].set_xlabel("Episode")
         axs[1].set_ylabel("Reward")
         axs[1].legend()
-        axs[1].set_title("Mean reward per episode")
+        axs[1].set_title(f"Mean reward per episode (avg={np.round(np.mean(episode_mean), 3)})")
 
-        plt.savefig(os.path.join(path, "reward.pdf"))
+        plt.savefig(os.path.join(path, title+".pdf"))
 
     def _plotLosses(self, critic_losses, actor_losses, path):
         # assure that episode length is 200
@@ -186,7 +193,7 @@ class Simulation():
         plt.legend()
         plt.savefig(os.path.join(path, "losses.pdf"))
 
-    def _plotHeatmap(self, path):
+    def _plotHeatmap(self, path, title="heatmap"):
         res = 20
 
         angle = torch.linspace(-np.pi, np.pi, res)
@@ -225,10 +232,9 @@ class Simulation():
             axs[i,j].set_ylabel("Velocity [rad/s]")
             axs[i,j].set_title(f"Torque = {2*t}Nm")
 
-        plt.savefig(os.path.join(path, "heatmap.pdf"))
+        plt.savefig(os.path.join(path, title+".pdf"))
 
-    def _plotPolarHeatMap(self, path):
-        print("inside polar heatmap")
+    def _plotPolarHeatMap(self, path, title="polar_heatmap"):
         res_angle = 360
         res_radial = 10
 
@@ -254,8 +260,9 @@ class Simulation():
                 fig.colorbar(cb, ax=axs[i,j])
                 axs[i,j].set_yticks([],[])
                 axs[i,j].set_theta_offset(np.pi/2)
+                axs[i,j].set_theta_direction(-1)
                 axs[i,j].set_title(f"Torque={2*torque}Nm, vel={v}m/s")
 
-        plt.savefig(os.path.join(path, "polar_heatmap.pdf"))
+        plt.savefig(os.path.join(path, title+".pdf"))
 
     

@@ -1,5 +1,6 @@
 import gym
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import os
 
@@ -9,6 +10,25 @@ from src.actor import Actor, RandomActor, HeuristicActor
 from src.action_noise import GaussianActionNoise, OUActionNoise
 from src.replay_buffer import ReplayBuffer
 from src.simulation import Simulation
+
+def plotAllLosses(dirs, path):
+    fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(14, 6))
+    fig.suptitle("Losses")
+    for dir_path in dirs:
+        df = pd.read_csv(os.path.join(dir_path, "losses.csv"))
+        axs[0].plot(range(len(df["critic"])), df["critic"].to_numpy(), label="tau="+str(df["tau"][0]) + ", theta="+str(df["theta"][0]))
+        axs[1].plot(range(len(df["actor"])), df["actor"].to_numpy(), label="tau="+str(df["tau"][0]) + ", theta="+str(df["theta"][0]))
+
+    axs[0].set_xlabel("Episode")
+    axs[0].set_ylabel("Loss")
+    axs[0].legend()
+    axs[0].set_title(f"Critic loss")
+    axs[1].set_xlabel("Episode")
+    axs[1].set_ylabel("Loss")
+    axs[1].legend()
+    axs[1].set_title(f"Actor loss")
+
+    plt.savefig(os.path.join(path, "losses.pdf"))
 
 def random_actor():
     # create environment and actor
@@ -95,7 +115,7 @@ def heuristic_qvalues_actor():
         actor = actor, 
         buffer=buffer,
     )
-    simu.train(num_episodes=1000, batch_size=128)
+    simu.train(num_episodes=200, batch_size=128)
 
 def simple_ddpg():
     # create environment, critic, actor, noise and buffer
@@ -138,24 +158,42 @@ def target_ddpg():
     simu.train(num_episodes=1000, batch_size=128)
     simu.run(num_episodes=100, render=False, plot=True)
 
-def ou_ddpg():
-    # create environment, critic, actor, noise and buffer
-    env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
-    critic = Critic(gamma=0.99, lr=1e-4, tau=0.01)
-    action_noise = OUActionNoise(sigma=0.3, theta=0.0, seed=0)
-    actor = Actor(lr=1e-4, tau=0.01, noise=action_noise)
-    buffer = ReplayBuffer(buffer_size=100000, seed=1)
+    # dirs = ["results/6_target_ddpg/20230525_0926_tau0.01_theta1.0", 
+    #         "results/6_target_ddpg/20230525_0949_tau0.05_theta1.0",
+    #         "results/6_target_ddpg/20230525_1013_tau0.1_theta1.0",
+    #         "results/6_target_ddpg/20230525_1035_tau0.5_theta1.0",
+    #         "results/6_target_ddpg/20230525_1055_tau1.0_theta1.0"]
+    # plotAllLosses(dirs=dirs, path="results/6_target_ddpg")
 
-    # train algorithm
-    simu = Simulation(
-        dir_path="results/7_ou_noise_ddpg", 
-        env=env, 
-        critic = critic,
-        actor = actor, 
-        buffer=buffer,
-    )
-    simu.train(num_episodes=1000, batch_size=128)
-    simu.run(num_episodes=100, render=False, plot=True)
+
+def ou_ddpg():
+    # # OU noise parameters
+    # theta = 1.0
+
+    # # create environment, critic, actor, noise and buffer
+    # env = NormalizedEnv(env=gym.make("Pendulum-v1", render_mode="rgb_array"))
+    # critic = Critic(gamma=0.99, lr=1e-4, tau=0.01)
+    # action_noise = OUActionNoise(sigma=0.3, theta=theta, seed=0)
+    # actor = Actor(lr=1e-4, tau=0.01, noise=action_noise)
+    # buffer = ReplayBuffer(buffer_size=100000, seed=1)
+
+    # # train algorithm
+    # simu = Simulation(
+    #     dir_path="results/7_ou_noise_ddpg", 
+    #     env=env, 
+    #     critic = critic,
+    #     actor = actor, 
+    #     buffer=buffer,
+    # )
+    # simu.train(num_episodes=1000, batch_size=128)
+    # simu.run(num_episodes=100, render=False, plot=True)
+
+    dirs = ["results/7_ou_noise_ddpg/20230525_1305_tau0.01_theta0.0",
+            "results/7_ou_noise_ddpg/20230525_1325_tau0.01_theta0.25",
+            "results/7_ou_noise_ddpg/20230525_1344_tau0.01_theta0.5",
+            "results/7_ou_noise_ddpg/20230525_1401_tau0.01_theta0.75",
+            "results/7_ou_noise_ddpg/20230525_1511_tau0.01_theta1.0"]
+    plotAllLosses(dirs=dirs, path="results/7_ou_noise_ddpg")
 
 
 if __name__ == "__main__":
@@ -190,11 +228,11 @@ if __name__ == "__main__":
         Target DDPG
         -> test and debug
     """
-    target_ddpg()
+    # target_ddpg()
 
     """
     PART 7
         Orstein-Uhlenbeck noise
         -> test and debug
     """
-    # ou_ddpg()
+    ou_ddpg()

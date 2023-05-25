@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import torch
 import os
 import shutil
@@ -30,6 +31,8 @@ class Simulation():
         # create directory
         t = datetime.now()
         dir_name = t.strftime("%Y%m%d") + "_" + t.strftime("%H%M")
+        if hasattr(self.actor, "tau"):
+            dir_name = dir_name + "_tau"+str(self.actor.tau) + "_theta"+str(self.actor.noise.theta)
         self.dir_path = os.path.join(dir_path, dir_name)
         if os.path.exists(self.dir_path):
             shutil.rmtree(self.dir_path)
@@ -193,6 +196,12 @@ class Simulation():
         plt.legend()
         plt.savefig(os.path.join(path, "losses.pdf"))
 
+        if hasattr(self.actor, "tau"):
+            df = pd.DataFrame({"critic":c_losses, "actor":a_losses, "tau":self.critic.tau, "theta":self.actor.noise.theta})
+        else:
+            df = pd.DataFrame({"critic":c_losses, "actor":a_losses})
+        df.to_csv(os.path.join(path, "losses.csv"))
+
     def _plotHeatmap(self, path, title="heatmap"):
         res = 20
 
@@ -214,18 +223,25 @@ class Simulation():
         angle = angle.reshape(meshgrid[0].shape).detach().numpy()
         vel = vel.reshape(angle.shape).detach().numpy()
 
-        fig, axs = plt.subplots(nrows=3, ncols=3, figsize=(15,15))
-        fig.suptitle('Estimated V-values')
+        q_values = []
         for idx, t in enumerate(np.linspace(-1, 1, 9)):
-            i = idx // 3
-            j = idx % 3
             state_copy = state.detach().clone()
 
             torque = t * torch.ones(state_copy.shape[0])
             q_val = self.critic.computeQValues(states=state_copy, actions=torque, target=False)
             q_val = q_val.reshape(angle.shape).detach().numpy()
-            
-            colorbar = axs[i,j].pcolormesh(angle, vel, q_val)
+            q_values.append(q_val)
+
+        q_val_max = np.max(q_values)
+        q_val_min = np.min(q_values)
+
+        fig, axs = plt.subplots(nrows=3, ncols=3, figsize=(15,15))
+        fig.suptitle('Estimated V-values')
+        for idx, q_val in enumerate(q_values):
+            i = idx // 3
+            j = idx % 3
+
+            colorbar = axs[i,j].pcolormesh(angle, vel, q_val, vmin=q_val_min, vmax=q_val_max)
             axs[i,j].axis([np.min(angle), np.max(angle), np.min(vel), np.max(vel)])
             fig.colorbar(colorbar, ax=axs[i,j])
             axs[i,j].set_xlabel("Angle [rad]")
@@ -245,23 +261,35 @@ class Simulation():
         cos_a = torch.cos(torch.tensor(a, dtype=torch.float32)).reshape(-1,1)
         sin_a = torch.sin(torch.tensor(a, dtype=torch.float32)).reshape(-1,1)   
 
-        fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(12,7), subplot_kw={'projection':"polar"})      
-        
-        for i, v in enumerate([0, 2.5]):
-            for j, torque in enumerate([-1, 0, 1]):
+        velocities = [0, 2.5]
+        torques = [-1, 0, 1]
+        q_values = []
+        for i, v in enumerate(velocities):
+            for j, torque in enumerate(torques):
                 vel = v * torch.ones_like(cos_a, dtype=torch.float32)
                 states = torch.concat((cos_a, sin_a, vel), axis=1)
                 actions = torque * torch.ones_like(cos_a, dtype=torch.float32)
                 q_val = self.critic.computeQValues(states=states, actions=actions.reshape(-1,1), target=False)
 
                 q_val = q_val.detach().numpy().reshape(res_angle, res_radial)
-                cb = axs[i,j].pcolormesh(a, r, q_val)
-                axs[i,j].plot(angle, r, color='k', ls='none') 
-                fig.colorbar(cb, ax=axs[i,j])
-                axs[i,j].set_yticks([],[])
-                axs[i,j].set_theta_offset(np.pi/2)
-                axs[i,j].set_theta_direction(-1)
-                axs[i,j].set_title(f"Torque={2*torque}Nm, vel={v}m/s")
+                q_values.append(q_val)
+                
+        
+        q_val_max = np.max(q_values)
+        q_val_min = np.min(q_values)
+
+        fig, axs = plt.subplots(nrows=3, ncols=2, figsize=(8.5,12), subplot_kw={'projection':"polar"})      
+        for idx, q_val in enumerate(q_values):
+            i = idx // len(torques)
+            j = idx % len(torques)
+                    
+            cb = axs[j,i].pcolormesh(a, r, q_val, vmin=q_val_min, vmax=q_val_max)
+            axs[j,i].plot(angle, r, color='k', ls='none') 
+            fig.colorbar(cb, ax=axs[j,i])
+            axs[j,i].set_yticks([],[])
+            axs[j,i].set_theta_offset(np.pi/2)
+            axs[j,i].set_theta_direction(-1)
+            axs[j,i].set_title(f"Torque={2*torques[j]}Nm, vel={velocities[i]}m/s")
 
         plt.savefig(os.path.join(path, title+".pdf"))
 

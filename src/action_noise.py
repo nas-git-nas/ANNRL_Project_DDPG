@@ -4,6 +4,7 @@ from abc import abstractmethod
 class ActionNoise():
     def __init__(self, sigma, seed):
         self._sigma = sigma
+        self.theta = 1.0
         self.generator = torch.Generator().manual_seed(seed)
 
     @abstractmethod

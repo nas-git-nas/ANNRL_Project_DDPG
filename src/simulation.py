@@ -21,6 +21,7 @@ class Simulation():
             critic:Critic,
             actor:Actor,
             buffer:ReplayBuffer,
+            create_dir:bool=True,
         ) -> None:
 
         self.env = env
@@ -29,16 +30,17 @@ class Simulation():
         self.buffer = buffer
 
         # create directory
-        t = datetime.now()
-        dir_name = t.strftime("%Y%m%d") + "_" + t.strftime("%H%M")
-        if hasattr(self.actor, "tau"):
-            dir_name = dir_name + "_tau"+str(self.actor.tau) + "_theta"+str(self.actor.noise.theta)
-        self.dir_path = os.path.join(dir_path, dir_name)
-        if os.path.exists(self.dir_path):
-            shutil.rmtree(self.dir_path)
-        os.mkdir(self.dir_path)
+        if create_dir:
+            t = datetime.now()
+            dir_name = t.strftime("%Y%m%d") + "_" + t.strftime("%H%M")
+            if hasattr(self.actor, "tau"):
+                dir_name = dir_name + "_tau"+str(self.actor.tau) + "_theta"+str(self.actor.noise.theta)
+            self.dir_path = os.path.join(dir_path, dir_name)
+            if os.path.exists(self.dir_path):
+                shutil.rmtree(self.dir_path)
+            os.mkdir(self.dir_path)
 
-    def run(self, num_episodes, render, plot):
+    def run(self, num_episodes, render, plot, verbose=True):
         # create figure for rendering
         if render:
             fig = plt.figure()
@@ -49,7 +51,7 @@ class Simulation():
         cum_rewards = []
         for i in range(num_episodes):
             # print testing progress
-            if i%10 == 0:
+            if verbose and i%10 == 0:
                 print(f"Testing episode: {i}/{num_episodes}")
 
             # reset environment
@@ -73,7 +75,7 @@ class Simulation():
                     assert len(step_rewards) % 200 == 0 # verfiy that episode length is 200
                     break
 
-            # log cummulative reward
+            # log cumulative reward
             cum_rewards.append(np.sum(step_rewards[i*200:]))
 
         # show animation of environment
@@ -126,14 +128,15 @@ class Simulation():
                     assert len(step_rewards) % 200 == 0 # verfiy that episode length is 200
                     break
 
-            # log cummulative reward
+            # log cumulative reward
             cum_rewards.append(np.sum(step_rewards[i*200:]))
 
         # plot rewards, losses and heat maps
         self._plotReward(step_rewards=step_rewards, cum_rewards=cum_rewards, path=self.dir_path, title="reward_training")
-        self._plotLosses(critic_losses=self.critic.log_losses, actor_losses=self.actor.log_losses, path=self.dir_path)
+        self._plotLosses(critic_losses=self.critic.log_losses, actor_losses=self.actor.log_losses, cum_rewards=cum_rewards, path=self.dir_path)
         self._plotHeatmap(path=self.dir_path)
         self._plotPolarHeatMap(path=self.dir_path)
+        self._plotDiffHeatMap(path=self.dir_path)
 
         # save models
         self.critic.saveModels(path=self.dir_path)
@@ -160,11 +163,11 @@ class Simulation():
         fig, axs = plt.subplots(nrows=2, ncols=1, figsize=(10, 10))
         fig.suptitle("Rewards per episode")
 
-        axs[0].plot(range(len(episode_mean)), cum_rewards, label="Cummulative", color="red")
+        axs[0].plot(range(len(episode_mean)), cum_rewards, label="Cumulative", color="red")
         axs[0].set_xlabel("Episode")
         axs[0].set_ylabel("Reward")
         axs[0].legend()
-        axs[0].set_title(f"Cummulative reward per episode (avg={np.round(np.mean(cum_rewards), 3)})")
+        axs[0].set_title(f"Cumulative reward per episode (avg={np.round(np.mean(cum_rewards), 3)})")
 
         axs[1].plot(range(len(episode_mean)), episode_mean, label="Mean", color="red")
         axs[1].fill_between(x=range(len(episode_mean)), y1=episode_per5, y2=episode_per95, alpha=0.2, color="blue", label="Percentile 5-95%")
@@ -173,9 +176,9 @@ class Simulation():
         axs[1].legend()
         axs[1].set_title(f"Mean reward per episode (avg={np.round(np.mean(episode_mean), 3)})")
 
-        plt.savefig(os.path.join(path, title+".pdf"))
+        plt.savefig(os.path.join(path, title+".pdf"), bbox_inches="tight")
 
-    def _plotLosses(self, critic_losses, actor_losses, path):
+    def _plotLosses(self, critic_losses, actor_losses, cum_rewards, path):
         # assure that episode length is 200
         assert len(critic_losses) % 200 == 0 and len(critic_losses) == len(actor_losses)
         
@@ -194,12 +197,12 @@ class Simulation():
         plt.xlabel("Episode")
         plt.ylabel("Loss")
         plt.legend()
-        plt.savefig(os.path.join(path, "losses.pdf"))
+        plt.savefig(os.path.join(path, "losses.pdf"), bbox_inches="tight")
 
         if hasattr(self.actor, "tau"):
-            df = pd.DataFrame({"critic":c_losses, "actor":a_losses, "tau":self.critic.tau, "theta":self.actor.noise.theta})
+            df = pd.DataFrame({"critic":c_losses, "actor":a_losses, "cum_rewards":cum_rewards, "tau":self.critic.tau, "theta":self.actor.noise.theta})
         else:
-            df = pd.DataFrame({"critic":c_losses, "actor":a_losses})
+            df = pd.DataFrame({"critic":c_losses, "actor":a_losses, "cum_rewards":cum_rewards})
         df.to_csv(os.path.join(path, "losses.csv"))
 
     def _plotHeatmap(self, path, title="heatmap"):
@@ -248,7 +251,7 @@ class Simulation():
             axs[i,j].set_ylabel("Velocity [rad/s]")
             axs[i,j].set_title(f"Torque = {2*t}Nm")
 
-        plt.savefig(os.path.join(path, title+".pdf"))
+        plt.savefig(os.path.join(path, title+".pdf"), bbox_inches="tight")
 
     def _plotPolarHeatMap(self, path, title="polar_heatmap"):
         res_angle = 360
@@ -278,19 +281,83 @@ class Simulation():
         q_val_max = np.max(q_values)
         q_val_min = np.min(q_values)
 
-        fig, axs = plt.subplots(nrows=3, ncols=2, figsize=(8.5,12), subplot_kw={'projection':"polar"})      
+        fig, axs = plt.subplots(nrows=1, ncols=6, figsize=(24,3), subplot_kw={'projection':"polar"})
         for idx, q_val in enumerate(q_values):
             i = idx // len(torques)
             j = idx % len(torques)
+            v = velocities[i]
                     
-            cb = axs[j,i].pcolormesh(a, r, q_val, vmin=q_val_min, vmax=q_val_max)
-            axs[j,i].plot(angle, r, color='k', ls='none') 
-            fig.colorbar(cb, ax=axs[j,i])
-            axs[j,i].set_yticks([],[])
-            axs[j,i].set_theta_offset(np.pi/2)
-            axs[j,i].set_theta_direction(-1)
-            axs[j,i].set_title(f"Torque={2*torques[j]}Nm, vel={velocities[i]}m/s")
+            cb = axs[idx].pcolormesh(a, r, q_val, vmin=q_val_min, vmax=q_val_max)
+            axs[idx].plot(angle, r, color='k', ls='none') 
+            axs[idx].set_yticks([],[])
+            axs[idx].tick_params(axis='x', which='major', labelsize=11)
+            axs[idx].set_theta_offset(np.pi/2)
+            axs[idx].set_theta_direction(-1)
+            axs[idx].set_title(f"Torque={2*torques[j]}Nm, vel={-v}rad/s", fontsize=14)
 
-        plt.savefig(os.path.join(path, title+".pdf"))
+        cbar = fig.colorbar(cb, ax=axs, fraction=0.008, pad=0.03)
+        cbar.ax.tick_params(labelsize=11)
+        plt.savefig(os.path.join(path, title+".pdf"), bbox_inches="tight")
+    
+    def _plotDiffHeatMap(self, path, title="diff_heatmap"):
+        res_angle = 360
+        res_radial = 10
+
+        radius = np.linspace(0, 1, res_radial)
+        angle = np.linspace(-np.pi, np.pi, res_angle)
+
+        r, a = np.meshgrid(radius, angle)
+        cos_a = torch.cos(torch.tensor(a, dtype=torch.float32)).reshape(-1,1)
+        sin_a = torch.sin(torch.tensor(a, dtype=torch.float32)).reshape(-1,1)   
+
+        velocities = [0, 2.5]
+        torques = [-1, 0, 1]
+        q_values = []
+        torques_mask = []
+        for i, v in enumerate(velocities):
+            for j, torque in enumerate(torques):
+                vel = v * torch.ones_like(cos_a, dtype=torch.float32)
+                states = torch.concat((cos_a, sin_a, vel), axis=1)
+                actions = torque * torch.ones_like(cos_a, dtype=torch.float32)
+                q_val = self.critic.computeQValues(states=states, actions=actions.reshape(-1,1), target=False)
+
+                q_val = q_val.detach().numpy().reshape(res_angle, res_radial)
+                q_values.append(q_val)
+                torques_mask.append(torque)
+        
+        q_values = np.array(q_values)
+        torques_mask = np.array(torques_mask)
+        q_values[torques_mask == -1] = q_values[torques_mask == -1] - q_values[torques_mask == 0]
+        q_values[torques_mask == 1] = q_values[torques_mask == 1] - q_values[torques_mask == 0]
+
+        q_val_diff_max = np.max(q_values[torques_mask != 0])
+        q_val_diff_min = np.min(q_values[torques_mask != 0])
+
+        q_val_min = np.min(q_values[torques_mask == 0])
+        q_val_max = np.max(q_values[torques_mask == 0])
+
+        fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(12,7), subplot_kw={'projection':"polar"})
+
+        for idx, q_val in enumerate(q_values):
+            i = idx // len(torques)
+            j = idx % len(torques)
+            v = velocities[i]
+            
+            if torques[j] == 0:
+                cb = axs[i,j].pcolormesh(a, r, q_val, vmin=q_val_min, vmax=q_val_max)
+            else:
+                cb = axs[i,j].pcolormesh(a, r, q_val, vmin=q_val_diff_min, vmax=q_val_diff_max)
+            axs[i,j].plot(angle, r, color='k', ls='none') 
+            fig.colorbar(cb, ax=axs[i,j], pad=0.12)
+            axs[i,j].set_yticks([],[])
+            axs[i,j].tick_params(axis='x', which='major', labelsize=9)
+            axs[i,j].set_theta_offset(np.pi/2)
+            axs[i,j].set_theta_direction(-1)
+            if torques[j] == 0:
+                axs[i,j].set_title(f"Q(Torque=0), vel={-v}rad/s", fontsize=10)
+            else:
+                axs[i,j].set_title(f"Q(Torque={2*torques[j]})-Q(Torque=0), vel={-v}rad/s", fontsize=10)
+
+        plt.savefig(os.path.join(path, title+".pdf"), bbox_inches="tight")
 
     

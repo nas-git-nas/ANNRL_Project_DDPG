@@ -9,7 +9,8 @@
     * Algorithm: _Continuous control with deep reinforcement learning_ from Timothy P. Lillicrap, Jonathan J. Hunt, Alexander Pritzel, Nicolas Heess, Tom Erez, Yuval Tassa, David Silver and Daan Wierstra, 2019
 
 ## Report
-* Miniproject_DDPG.pdf is the project description.
+* _Miniproject_DDPG.pdf_ is the project description.
+* _Report_DDPG_BobrovskiiDaniil_SchmidNicolaj.pdf_ is the project report which discusses the results.
 
 ## Code
 * Select the desired algorithm and execute it with _run.py_. All figures, the loss data and the models are saved in the _results_ directory.
